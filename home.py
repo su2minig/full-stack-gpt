@@ -1,27 +1,27 @@
 import streamlit as st
-from langchain.prompts import PromptTemplate
+from datetime import datetime
 
-st.title("Hello world!")
+today = datetime.today().strftime("%H:%M:%S")
 
-st.subheader("Welcome to streamlit")
+st.title(today)
 
-st.markdown(
-    """
-    This is a simple example of a streamlit app.
-    """
+model = st.selectbox(
+  "CHoose your model",
+  (
+    "GPT-3","GPT-4"
+  ),
 )
 
-st.write("hello")
+st.write(model)
 
-st.write([1,2,3,4])
+name = st.text_input("What is your name?")
 
-st.write({"x": 1})
+st.write(name)
 
-st.write(PromptTemplate)
+value = st.slider(
+  "temperature",
+  min_value=0.1,
+  max_value=1.0
+)
 
-p = PromptTemplate.from_template("xxxx")
-
-st.write(p)
-
-
-st.selectbox("CHoose your model", ("GPT-3","GPT-4"),)
+st.write(value)
