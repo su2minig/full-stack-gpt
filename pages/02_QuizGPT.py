@@ -9,15 +9,6 @@ import streamlit as st
 from langchain.retrievers import WikipediaRetriever
 from langchain.schema import BaseOutputParser, output_parser
 
-
-class JsonOutputParser(BaseOutputParser):
-    def parse(self, text):
-        text = text.replace("```", "").replace("json", "")
-        return json.loads(text)
-
-
-output_parser = JsonOutputParser()
-
 st.set_page_config(
     page_title="QuizGPT",
     page_icon="❓",
@@ -25,17 +16,8 @@ st.set_page_config(
 
 st.title("QuizGPT")
 
-llm = ChatOpenAI(
-    temperature=0.1,
-    model="gpt-3.5-turbo-1106",
-    streaming=True,
-    callbacks=[StreamingStdOutCallbackHandler()],
-)
-
-
 def format_docs(docs):
     return "\n\n".join(document.page_content for document in docs)
-
 
 questions_prompt = ChatPromptTemplate.from_messages(
     [
@@ -44,7 +26,9 @@ questions_prompt = ChatPromptTemplate.from_messages(
             """
     You are a helpful assistant that is role playing as a teacher.
          
-    Based ONLY on the following context make 10 (TEN) questions minimum to test the user's knowledge about the text.
+    Based ONLY on the following context make 10 (TEN) questions minimum to test the user's knowledge about the text with {level}.
+    
+    If the {level} is hard, make the quiz difficult to solve. If the {level} is easy, make the quiz easy to solve.
     
     Each question should have 4 answers, three of them must be incorrect and one should be correct.
          
@@ -53,16 +37,16 @@ questions_prompt = ChatPromptTemplate.from_messages(
     Question examples:
          
     Question: What is the color of the ocean?
-    Answers: Red|Yellow|Green|Blue(o)
+    Answers: Red|Yellow|Green|Blue
          
     Question: What is the capital or Georgia?
-    Answers: Baku|Tbilisi(o)|Manila|Beirut
+    Answers: Baku|Tbilisi|Manila|Beirut
          
     Question: When was Avatar released?
-    Answers: 2007|2001|2009(o)|1998
+    Answers: 2007|2001|2009|1998
          
     Question: Who was Julius Caesar?
-    Answers: A Roman Emperor(o)|Painter|Actor|Model
+    Answers: A Roman Emperor|Painter|Actor|Model
          
     Your turn!
          
@@ -72,135 +56,57 @@ questions_prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
-questions_chain = {"context": format_docs} | questions_prompt | llm
+function = {
+    "name": "create_quiz",
+    "description": "function that takes a list of questions and answers and returns a quiz",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "questions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "question": {
+                            "type": "string",
+                        },
+                        "answers": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "answer": {
+                                        "type": "string",
+                                    },
+                                    "correct": {
+                                        "type": "boolean",
+                                    },
+                                },
+                                "required": ["answer", "correct"],
+                            },
+                        },
+                    },
+                    "required": ["question", "answers"],
+                },
+            }
+        },
+        "required": ["questions"],
+    },
+}
 
-formatting_prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            """
-    You are a powerful formatting algorithm.
-     
-    You format exam questions into JSON format.
-    Answers with (o) are the correct ones.
-     
-    Example Input:
-
-    Question: What is the color of the ocean?
-    Answers: Red|Yellow|Green|Blue(o)
-         
-    Question: What is the capital or Georgia?
-    Answers: Baku|Tbilisi(o)|Manila|Beirut
-         
-    Question: When was Avatar released?
-    Answers: 2007|2001|2009(o)|1998
-         
-    Question: Who was Julius Caesar?
-    Answers: A Roman Emperor(o)|Painter|Actor|Model
-    
-     
-    Example Output:
-     
-    ```json
-    {{ "questions": [
-            {{
-                "question": "What is the color of the ocean?",
-                "answers": [
-                        {{
-                            "answer": "Red",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Yellow",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Green",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Blue",
-                            "correct": true
-                        }},
-                ]
-            }},
-                        {{
-                "question": "What is the capital or Georgia?",
-                "answers": [
-                        {{
-                            "answer": "Baku",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Tbilisi",
-                            "correct": true
-                        }},
-                        {{
-                            "answer": "Manila",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Beirut",
-                            "correct": false
-                        }},
-                ]
-            }},
-                        {{
-                "question": "When was Avatar released?",
-                "answers": [
-                        {{
-                            "answer": "2007",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "2001",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "2009",
-                            "correct": true
-                        }},
-                        {{
-                            "answer": "1998",
-                            "correct": false
-                        }},
-                ]
-            }},
-            {{
-                "question": "Who was Julius Caesar?",
-                "answers": [
-                        {{
-                            "answer": "A Roman Emperor",
-                            "correct": true
-                        }},
-                        {{
-                            "answer": "Painter",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Actor",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Model",
-                            "correct": false
-                        }},
-                ]
-            }}
-        ]
-     }}
-    ```
-    Your turn!
-
-    Questions: {context}
-
-""",
-        )
-    ]
+llm = ChatOpenAI(
+    temperature=0.1,
+    model="gpt-3.5-turbo-1106",
+    streaming=True,
+    callbacks=[StreamingStdOutCallbackHandler()],
+).bind(
+    function_call={
+        "name": "create_quiz",
+    },
+    functions=[
+        function,
+    ],
 )
-
-formatting_chain = formatting_prompt | llm
-
 
 @st.cache_data(show_spinner="Loading file...")
 def split_file(file):
@@ -219,9 +125,12 @@ def split_file(file):
 
 
 @st.cache_data(show_spinner="Making quiz...")
-def run_quiz_chain(_docs, topic):
-    chain = {"context": questions_chain} | formatting_chain | output_parser
-    return chain.invoke(_docs)
+def run_quiz_chain(level, _docs):
+    chain = questions_prompt | llm
+    
+    response = chain.invoke({"level": level,"context": docs})
+    response = json.loads(response.additional_kwargs["function_call"]["arguments"])
+    return response
 
 
 @st.cache_data(show_spinner="Searching Wikipedia...")
@@ -232,6 +141,23 @@ def wiki_search(term):
 
 
 with st.sidebar:
+    api_key = st.text_input("Enter your OpenAI API key")
+    if api_key:
+        llm = ChatOpenAI(
+            api_key=api_key,
+            temperature=0.1,
+            model="gpt-3.5-turbo-1106",
+            streaming=True,
+            callbacks=[StreamingStdOutCallbackHandler()],
+        ).bind(
+            function_call={
+                "name": "create_quiz",
+            },
+            functions=[
+                function,
+            ],
+        )
+
     docs = None
     choice = st.selectbox(
         "Choose what you want to use.",
@@ -264,17 +190,45 @@ if not docs:
     """
     )
 else:
-    response = run_quiz_chain(docs, topic if topic else file.name)
-    with st.form("questions_form"):
-        for question in response["questions"]:
-            st.write(question["question"])
-            value = st.radio(
-                "Select an option.",
-                [answer["answer"] for answer in question["answers"]],
-                index=None,
-            )
-            if {"answer": value, "correct": True} in question["answers"]:
-                st.success("Correct!")
-            elif value is not None:
-                st.error("Wrong!")
-        button = st.form_submit_button()
+    with st.form("Level"):
+        level = st.radio(
+            "Select the level of difficulty.",
+            ["Easy","Hard"],
+            index=None,
+        )
+        level_button = st.form_submit_button()
+        if level_button:
+            st.session_state["level"]=level
+        
+    st.write(level)
+    if st.session_state["level"]!=None:
+        response = run_quiz_chain(level, docs)
+        with st.form("questions_form"):
+            correct_answers = 0
+            answered_questions = 0
+            total_questions = len(response["questions"])
+            answers = {}
+            
+            for question in response["questions"]:
+                st.write(question["question"])
+                value = st.radio(
+                    "Select an option.",
+                    [answer["answer"] for answer in question["answers"]],
+                    index=None,
+                    key=question["question"],
+                )
+                if value:
+                    answered_questions += 1
+                    answers[question["question"]] = value
+                
+                if {"answer": value, "correct": True} in question["answers"]:
+                    correct_answers += 1
+                    st.success("Correct!")
+                elif value is not None:
+                    st.error("Wrong!")
+
+                if correct_answers == total_questions:
+                    st.balloons()
+                    st.success("Congratulations! You answered all questions correctly.")
+            
+            button = st.form_submit_button()
